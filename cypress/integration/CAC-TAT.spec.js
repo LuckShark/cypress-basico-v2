@@ -1,7 +1,8 @@
 /// <reference types="Cypress" />
 
 describe('Central de Atendimento ao Cliente TAT', function() { 
-
+    const THREE_SECONDS_IN_MS = 3000 //vai servir no cy.tick
+    //com essa constante acima, eu também verifico se a mensagem de erro/acerto aparece e desaparece
     beforeEach(function(){ 
         cy.visit('./src/index.html')
     })
@@ -15,16 +16,25 @@ describe('Central de Atendimento ao Cliente TAT', function() {
     it('preenche os campos obrigatórios e envia o formulário', function(){ 
         const longText = '1- Lorem ipsum dolor sit amet consectetur adipisicing elit. Quam, laborum voluptatibus exercitationem culpa quasi nesciunt fugiat animi quod fugit hic placeat sit officiis deserunt maxime doloribus, commodi delectus voluptatem sint?2-Lorem ipsum dolor sit amet consectetur adipisicing elit. Quam, laborum voluptatibus exercitationem culpa quasi nesciunt fugiat animi quod fugit hic placeat sit officiis deserunt maxime doloribus, commodi delectus voluptatem sint?'
 
+        //usando o clock para congelar o relógio do navegador
+        cy.clock()
+
         cy.get('#firstName').type('Lucas') 
         cy.get('#lastName').type('Araujo')
         cy.get('#email').type('exemplo@gmail.com')
         cy.get('#open-text-area').type(longText, {delay: 0})
         cy.contains('button', 'Enviar').click() 
 
-        cy.get('.success').should('be.visible') 
+        cy.get('.success').should('be.visible')
+
+        //agora usando o tick pra avançar no tempo e fazer a msg de confirmação desaparecer
+        cy.tick(THREE_SECONDS_IN_MS)
+        cy.get('.success').should('not.be.visible')
+        //com isso, o teste demora pouco mais de 1s. Eu não preciso esperar os 3s para a msgde confirmação desaparecer
     })
 
     it('exibe mensagem de erro ao submeter o formulário com um email com formatação inválida',function(){
+        cy.clock()
         cy.get('#firstName').type('Lucas') 
         cy.get('#lastName').type('Araujo')
         cy.get('#email').type('exemplo@gmail,com')
@@ -32,15 +42,23 @@ describe('Central de Atendimento ao Cliente TAT', function() {
         cy.contains('button', 'Enviar').click() 
 
         cy.get('.error').should('be.visible')
+
+        //mensagem de erro deve sumir depois de 3 segundos
+        cy.tick(THREE_SECONDS_IN_MS)
+        cy.get('.error').should('not.be.visible')
     })
 
-    it('campo telefone com valor não númerico continua vazio', function(){
-        cy.get('#phone')
-        .type('abcdefghij')
-        .should('have.value', '') //valor deve ser uma string vazia - ou seja, n tem nada
+    //usando o Lodash
+    Cypress._.times(5, function(){
+        it('campo telefone com valor não númerico continua vazio', function(){
+            cy.get('#phone')
+            .type('abcdefghij')
+            .should('have.value', '') //valor deve ser uma string vazia - ou seja, n tem nada
+        })
     })
 
     it('exibe mensagem de erro quando o telefone se torna obrigatório mas não é preenchido antes do envio do formulário', function(){
+        cy.clock()
         cy.get('#firstName').type('Lucas') 
         cy.get('#lastName').type('Araujo')
         cy.get('#email').type('exemplo@gmail.com')
@@ -52,6 +70,10 @@ describe('Central de Atendimento ao Cliente TAT', function() {
         cy.contains('button', 'Enviar').click() 
 
         cy.get('.error').should('be.visible')
+        
+        //mensagem de erro deve sumir depois de 3 segundos
+        cy.tick(THREE_SECONDS_IN_MS)
+        cy.get('.error').should('not.be.visible')
     })
 
     it('preenche e limpa os campos nome, sobrenome, email, telefone e como podemos ajudar', function(){ //Testando o CLEAR
@@ -83,17 +105,25 @@ describe('Central de Atendimento ao Cliente TAT', function() {
     })
 
     it('exibe mensagem de erro ao submeter o formulário sem preencher os campos obrigatórios', function(){
+        cy.clock()
         //cy.get('.button').click() poderia ser esse, mas estou usando a opção debaixo:
         cy.contains('button', 'Enviar').click() 
 
         cy.get('.error').should('be.visible')
+        //mensagem de erro deve sumir depois de 3 segundos
+        cy.tick(THREE_SECONDS_IN_MS)
+        cy.get('.error').should('not.be.visible')
     })
 
     it('envia o formuário com sucesso usando um comando customizado', function() {
+        cy.clock()
         //comando customizado - procurar na pasta support > commands.js
         cy.fillMandatoryFieldsAndSubmit('Lucas', 'Araujo')
 
         cy.get('.success').should('be.visible') 
+        //mensagem de erro deve sumir depois de 3 segundos
+        cy.tick(THREE_SECONDS_IN_MS)
+        cy.get('.error').should('not.be.visible')
     })
     //Troquei todos os cy.get(button...) por cy.contain(...)
 
@@ -193,6 +223,55 @@ describe('Central de Atendimento ao Cliente TAT', function() {
 
         //agora vamos fazer uma verificação para confirmar que mudou de página
         cy.contains('Talking About Testing').should('be.visible')
+    })
+
+    //usando o INVOKE
+
+    it('exibe e esconde as mensagens de sucesso e erro usando o .invoke', () => { //pode fazer o function(){} normal tbm se quiser
+        cy.get('.success')
+          .should('not.be.visible')
+          .invoke('show')
+          .should('be.visible')
+          .and('contain', 'Mensagem enviada com sucesso.')
+          .invoke('hide')
+          .should('not.be.visible')
+        cy.get('.error')
+          .should('not.be.visible')
+          .invoke('show')
+          .should('be.visible')
+          .and('contain', 'Valide os campos obrigatórios!')
+          .invoke('hide')
+          .should('not.be.visible')
+      })
+
+      it('preenche área de texto usando o comando invoke', function(){
+        const longText = Cypress._.repeat('0123456789', 20) //esse texto vai ter 200 caracteres
+
+        cy.get('#open-text-area')
+            .invoke('val', longText)
+            .should('have.value', longText)
+    })
+
+    it('faz uma requisição HTTP', function(){
+        cy.request('https://cac-tat.s3.eu-central-1.amazonaws.com/index.html')
+            .should(function(response){
+                console.log(response);
+                    const{status, statusText, body} = response //assim que desestrutura um objeto no javascript
+                    expect(status).to.equal(200)
+                    expect(statusText).to.equal('OK')
+                    expect(body).to.include('CAC TAT')
+            })
+    })
+
+    //E X T R As
+    it('encontrando gato escondido / usando invoke para mudar títulos', function(){
+        cy.get('#cat')
+            .invoke('show')
+            .should('be.visible')
+        cy.get('#title')
+            .invoke('text', 'CAT ATT')
+        cy.get('#subtitle')
+            .invoke('text','I dont 💗 🐈 at all')
     })
 
 
